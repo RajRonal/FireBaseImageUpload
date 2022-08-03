@@ -6,12 +6,12 @@ import (
 	"context"
 	"encoding/json"
 	firebase "firebase.google.com/go"
-	"fmt"
+	"github.com/sirupsen/logrus"
 	"google.golang.org/api/option"
 	"io"
-	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"time"
 )
 
@@ -20,40 +20,47 @@ func UploadImage(writer http.ResponseWriter, request *http.Request) {
 	var err error
 	client.Ctx = context.Background()
 	credentialsFile := option.WithCredentialsJSON([]byte(os.Getenv("FIRE_KEY")))
-	fmt.Println(credentialsFile)
+	//fmt.Println(credentialsFile)
 	app, err := firebase.NewApp(client.Ctx, nil, credentialsFile)
 	if err != nil {
-		log.Fatal(err)
+		logrus.Error(err)
+		return
 	}
 
 	client.Client, err = app.Firestore(client.Ctx)
 	if err != nil {
-		log.Fatal(err)
+		logrus.Error(err)
+		return
 	}
 
 	client.Storage, err = cloud.NewClient(client.Ctx, credentialsFile)
 	if err != nil {
-		log.Fatal(err)
+		logrus.Error(err)
+		return
 	}
 
 	file, fileHeader, err := request.FormFile("image")
 	err = request.ParseMultipartForm(10 << 20)
 	if err != nil {
+		logrus.Error(err)
 		writer.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
 	defer file.Close()
-	imagePath := fileHeader.Filename
+	imagePath := fileHeader.Filename + strconv.Itoa(int(time.Now().Unix()))
 	bucket := "image-a5e55.appspot.com"
 	bucketStorage := client.Storage.Bucket(bucket).Object(imagePath).NewWriter(client.Ctx)
+
 	_, err = io.Copy(bucketStorage, file)
 	if err != nil {
+		logrus.Error(err)
 		writer.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
 	if err := bucketStorage.Close(); err != nil {
+		logrus.Error(err)
 		writer.WriteHeader(http.StatusBadRequest)
 		return
 	}
@@ -65,12 +72,13 @@ func UploadImage(writer http.ResponseWriter, request *http.Request) {
 	}
 	url, err := client.Storage.Bucket(bucket).SignedURL(imagePath, signedUrl)
 	if err != nil {
+		logrus.Error(err)
 		return
 	}
-
-	log.Println(url)
+	logrus.Println(url)
 	errs := json.NewEncoder(writer).Encode(url)
 	if errs != nil {
+		logrus.Error(err)
 		writer.WriteHeader(http.StatusInternalServerError)
 		return
 	}

@@ -14,7 +14,6 @@ func SetupRoutes() *Server {
 	router := chi.NewRouter()
 	router.Route("/api", func(api chi.Router) {
 		api.Post("/image", handlers.UploadImage)
-
 	})
 	return &Server{router}
 }
